@@ -20,7 +20,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="1.0.0", prog_name="promptops")
+@click.version_option(version="1.1.0", prog_name="promptops")
 def main():
     """PromptOps CLI - 轻量级提示词工程运营工具"""
     pass

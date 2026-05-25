@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "promptops-zhuyt"
-version = "1.0.0"
+version = "1.1.0"
 description = "Lightweight Prompt Engineering Operations CLI - Version control, real LLM testing, and deployment for AI prompts"
 readme = "README.md"
 license = {text = "MIT"}

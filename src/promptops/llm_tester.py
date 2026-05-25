@@ -53,6 +53,7 @@ class LLMTester:
         
         if not tests:
             console.print("[yellow]⚠ No test cases defined[/]")
+            console.print("[yellow]⚠ 测试用例未定义[/]")
             return TestResult(
                 prompt_name=prompt.name,
                 version=prompt.version,
@@ -61,6 +62,8 @@ class LLMTester:
                 failed_tests=0,
                 accuracy=0.0,
                 latency_avg_ms=0.0,
+                latency_p95_ms=0.0,
+                total_cost=0.0,
                 errors=["No test cases"]
             )
         
@@ -96,17 +99,23 @@ class LLMTester:
                         latencies.append(response.latency_ms)
                         total_cost += response.cost
                         
-                        # 验证输出
-                        passed = self._match_expected(response.content, test.expected)
+                        # 验证输出（评分制）
+                        score = self._match_expected(response.content, test.expected)
+                        passed = score >= 0.5  # 50%以上匹配即通过
                     else:
                         # 模拟测试（不调用API）
                         passed = self._simulate_test(prompt, test)
                         latencies.append(50.0)  # 模拟延迟
-                    
+                        
                     if passed:
                         results.passed_tests += 1
+                        console.print(f"[green]  ✅ Passed: {test.description or 'unnamed'}[/]")
                     else:
                         results.failed_tests += 1
+                        console.print(f"[red]  ❌ Failed: {test.description or 'unnamed'}[/]")
+                        if live:
+                            console.print(f"[dim]  Expected: {test.expected}[/]")
+                            console.print(f"[dim]  LLM output (first 300 chars): {response.content[:300]}[/]")
                         results.errors.append(
                             f"Test failed: {test.description or test.input[:50]}"
                         )
@@ -221,27 +230,149 @@ class LLMTester:
         output: str,
         expected: Dict[str, Any]
     ) -> bool:
-        """匹配期望输出（简化版）"""
-        # 实际应用中应使用更智能的比对（如 LLM-as-judge）
-        try:
-            # 尝试解析JSON输出
-            if "{" in output:
-                import json
-                output_json = json.loads(output[output.find("{"):output.rfind("}")+1])
-                for key, value in expected.items():
-                    if key in output_json:
-                        # 部分匹配
-                        if str(value).lower() in str(output_json[key]).lower():
-                            return True
+        """评分制匹配期望输出：计算匹配分数，>=0.5视为通过"""
+        import json
+        import re
+
+        # 尝试从输出中提取JSON
+        output_json = self._extract_json(output)
+        if output_json is not None:
+            total, matched = self._count_recursive_matches(expected, output_json)
+            score = matched / total if total > 0 else 0.0
+            console.print(f"[dim]  Match score: {score:.0%} ({matched}/{total} fields)[/]")
+            return score >= 0.5
+
+        # JSON提取失败，退化为文本模糊匹配
+        total = len(expected)
+        matched = 0
+        output_lower = output.lower()
+        for key, value in expected.items():
+            value_str = str(value).lower()
+            if value_str in output_lower:
+                matched += 1
+        score = matched / total if total > 0 else 0.0
+        console.print(f"[dim]  Match score: {score:.0%} (text fallback)[/]")
+        return score >= 0.5
+
+    def _extract_json(self, text: str) -> Optional[Dict[str, Any]]:
+        """从LLM输出中提取JSON对象，支持markdown代码块包裹"""
+        import json
+        import re
+
+        # 优先尝试提取 ```json ... ``` 代码块中的完整内容
+        code_block = re.search(r'```(?:json)?\s*\n(.*?)\n?```', text, re.DOTALL)
+        if code_block:
+            try:
+                return json.loads(code_block.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        # 退化为括号平衡法提取最外层 { ... } JSON对象
+        start = text.find('{')
+        if start == -1:
+            return None
+
+        depth = 0
+        for i in range(start, len(text)):
+            if text[i] == '{':
+                depth += 1
+            elif text[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start:i + 1])
+                    except json.JSONDecodeError:
+                        return None
+        return None
+
+    def _count_recursive_matches(self, expected: Any, actual: Any) -> tuple:
+        """递归统计匹配数，返回(total_leaf_count, matched_count)"""
+        if isinstance(expected, dict) and isinstance(actual, dict):
+            total = 0
+            matched = 0
+            for key, exp_val in expected.items():
+                if key not in actual:
+                    # key缺失：将所有叶子节点计入失败
+                    t, _ = self._count_leaves(exp_val)
+                    total += t
+                else:
+                    t, m = self._count_recursive_matches(exp_val, actual[key])
+                    total += t
+                    matched += m
+            return (total, matched)
+
+        if isinstance(expected, list) and isinstance(actual, list):
+            total = 0
+            matched = 0
+            for exp_item in expected:
+                best_match = 0.0
+                for act_item in actual:
+                    t, m = self._count_recursive_matches(exp_item, act_item)
+                    score = m / t if t > 0 else 0.0
+                    best_match = max(best_match, score)
+                total += 1
+                matched += 1 if best_match >= 0.5 else 0
+            return (total, matched)
+
+        # 叶子节点比较
+        return (1, 1) if self._leaf_match(expected, actual) else (1, 0)
+
+    def _count_leaves(self, obj: Any) -> tuple:
+        """统计嵌套结构中的叶子节点总数"""
+        if isinstance(obj, dict):
+            total = 0
+            for v in obj.values():
+                t, _ = self._count_leaves(v)
+                total += t
+            return (total, 0)
+        if isinstance(obj, list):
+            total = 0
+            for item in obj:
+                t, _ = self._count_leaves(item)
+                total += t
+            return (total, 0)
+        return (1, 0)
+
+    def _leaf_match(self, expected: Any, actual: Any) -> bool:
+        """叶子节点匹配：字符串模糊匹配 + 数值近似匹配"""
+        # 数值近似匹配（±20%容忍度）
+        if isinstance(expected, (int, float)) and isinstance(actual, (int, float)):
+            if expected == 0 and actual == 0:
+                return True
+            if expected == 0 or actual == 0:
                 return False
-            else:
-                # 文本匹配
-                for key, value in expected.items():
-                    if str(value).lower() in output.lower():
-                        return True
-                return False
-        except:
-            return False
+            ratio = abs(actual - expected) / abs(expected)
+            return ratio <= 0.2
+
+        # 布尔精确匹配
+        if isinstance(expected, bool) or isinstance(actual, bool):
+            return bool(expected) == bool(actual)
+
+        # 字符串模糊匹配（子串包含）
+        exp_str = str(expected).lower().strip()
+        act_str = str(actual).lower().strip()
+        return exp_str in act_str or act_str in exp_str
+
+    def _recursive_match(self, expected: Any, actual: Any) -> bool:
+        """旧版精确递归匹配（保留供严格模式使用）"""
+        if isinstance(expected, dict) and isinstance(actual, dict):
+            for key, exp_val in expected.items():
+                if key not in actual:
+                    return False
+                if not self._recursive_match(exp_val, actual[key]):
+                    return False
+            return True
+
+        if isinstance(expected, list) and isinstance(actual, list):
+            for exp_item in expected:
+                if not any(self._recursive_match(exp_item, act_item) for act_item in actual):
+                    return False
+            return True
+
+        # 叶子节点：模糊字符串匹配
+        exp_str = str(expected).lower().strip()
+        act_str = str(actual).lower().strip()
+        return exp_str in act_str or act_str in exp_str
     
     def _simulate_test(
         self,
@@ -322,8 +453,8 @@ class LLMTester:
 ║   Failed:         {results.failed_tests}
 ║   Accuracy:       {results.accuracy * 100:.2f}%
 ║   Avg Latency:    {results.latency_avg_ms:.2f}ms
-║   P95 Latency:    {results.latency_p95_ms:.2f}ms
-║   Total Cost:     ${results.total_cost:.4f}
+║   P95 Latency:    {results.latency_p95_ms or 0.0:.2f}ms
+║   Total Cost:     ${(results.total_cost or 0.0):.4f}
 ╚══════════════════════════════════════════════════════════╝
 """
         

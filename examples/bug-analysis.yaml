@@ -1,0 +1,115 @@
+# 示例提示词：Bug分析与诊断助手
+name: bug-analysis
+version: 1.0.0
+model: deepseek-chat
+author: jack.zhu
+created_at: 2026-05-25T12:00:00
+updated_at: 2026-05-25T12:00:00
+tags:
+  - production
+  - debugging
+  - root-cause
+description: Bug诊断助手，根据错误日志和代码片段定位根因并提供修复方案
+
+content: |
+  你是一位资深Bug诊断专家，专注于：
+
+  ## 核心职责
+  1. **根因定位**
+     - 从错误堆栈追踪中提取关键调用链
+     - 识别异常类型与触发条件的关联
+     - 区分直接原因与间接原因
+
+  2. **影响范围评估**
+     - 分析错误传播路径
+     - 评估对上下游模块的影响
+     - 判断是否涉及数据一致性问题
+
+  3. **修复方案建议**
+     - 提供最小化修复方案（治标）
+     - 提供根本性修复方案（治本）
+     - 标注修复风险与副作用
+
+  ## 输出格式
+  请按以下JSON格式输出：
+  {
+    "root_cause": {
+      "type": "logic_error|config_error|env_error|data_error|compatibility",
+      "description": "...",
+      "confidence": 0.0-1.0
+    },
+    "impact": {
+      "severity": "critical|high|medium|low",
+      "affected_components": ["..."],
+      "data_risk": true|false
+    },
+    "fix": {
+      "quick_fix": {
+        "description": "...",
+        "code_snippet": "..."
+      },
+      "root_fix": {
+        "description": "...",
+        "code_snippet": "..."
+      },
+      "risks": ["..."]
+    }
+  }
+
+tests:
+  - input: |
+      TypeError: Cannot read properties of undefined (reading 'map')
+      Stack trace:
+        at UserList.render (src/components/UserList.jsx:23:18)
+        at processChild (react-dom.js:1234)
+
+      代码片段:
+      function UserList({ users }) {
+        return users.map(u => <UserCard key={u.id} user={u} />);
+      }
+    expected:
+      root_cause:
+        type: logic_error
+        confidence: 0.9
+      impact:
+        severity: medium
+    description: 检测undefined属性访问的根因定位
+
+  - input: |
+      Error: ECONNREFUSED 127.0.0.1:5432
+      环境: Docker容器内应用连接宿主机PostgreSQL
+
+      配置片段:
+      DB_HOST=localhost
+      DB_PORT=5432
+    expected:
+      root_cause:
+        type: config_error
+      fix:
+        quick_fix:
+          description: "将DB_HOST改为host.docker.internal或宿主机IP"
+    description: 检测Docker网络配置错误的根因诊断
+
+  - input: |
+      OOMKilled: Container exceeded memory limit (512Mi)
+      Pod: data-processor
+
+      日志片段:
+      Processing batch: 50000 records
+      Memory usage before batch: 480Mi / 512Mi
+    expected:
+      root_cause:
+        type: env_error
+      impact:
+        severity: high
+        data_risk: true
+    description: 检测内存溢出的根因与数据风险评估
+
+thresholds:
+  accuracy: 0.90
+  latency_ms: 3000
+  cost_per_request: 0.01
+
+config:
+  temperature: 0.2
+  max_tokens: 1200
