@@ -34,7 +34,7 @@ class VersionManager:
         if not config_path.exists():
             config = {
                 "project": self.base_path.name,
-                "default_model": "gpt-4o",
+                "default_model": "deepseek-chat",
                 "thresholds": {
                     "accuracy": 0.95,
                     "latency_ms": 500
@@ -61,7 +61,7 @@ class VersionManager:
         prompt = PromptDefinition(
             name=name,
             version="1.0.0",
-            model=model or "gpt-4o",
+            model=model or "deepseek-chat",
             author=author or "unknown",
             created_at=now,
             updated_at=now,

@@ -56,7 +56,7 @@ def init(project_name: str, directory: str):
 
 @main.command()
 @click.argument("name")
-@click.option("--model", "-m", default="gpt-4o", help="LLM 模型")
+@click.option("--model", "-m", default="deepseek-chat", help="LLM 模型")
 @click.option("--author", "-a", default="unknown", help="作者")
 @click.option("--tags", "-t", help="标签（逗号分隔）")
 @click.option("--description", "-d", help="描述")
@@ -135,12 +135,17 @@ def test(name: str, live: bool, sample: Optional[int]):
         # 配置 API keys
         openai_key = os.environ.get("OPENAI_API_KEY")
         anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+        deepseek_key = os.environ.get("DEEPSEEK_API_KEY")
         
-        if live and not openai_key and not anthropic_key:
+        if live and not openai_key and not anthropic_key and not deepseek_key:
             console.print("[yellow]⚠ 未配置 API Key，将使用模拟测试[/]")
             live = False
         
-        tester = LLMTester(openai_api_key=openai_key, anthropic_api_key=anthropic_key)
+        tester = LLMTester(
+            openai_api_key=openai_key,
+            anthropic_api_key=anthropic_key,
+            deepseek_api_key=deepseek_key
+        )
         
         console.print(f"\n[cyan]🧪 测试 '{name}' (v{prompt.version})[/]\n")
         

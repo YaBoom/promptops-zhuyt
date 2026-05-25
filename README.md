@@ -19,7 +19,7 @@ PromptOps 的核心场景是**提示词测试与评估**，Python 在这方面�
 promptops init my-project
 
 # 创建新提示词
-promptops new code-review --model gpt-4o --author jack.zhu
+promptops new code-review --model deepseek-chat --author jack.zhu
 
 # 查看版本历史
 promptops history code-review
@@ -28,7 +28,7 @@ promptops history code-review
 promptops rollback code-review v1.2.0
 ```
 
-### 2️⃣ 真实 LLM 测试（集成 OpenAI SDK）
+### 2️⃣ 真实 LLM 测试（集成 OpenAI / DeepSeek / Anthropic SDK）
 ```bash
 # 运行测试套件（真实调用 API）
 promptops test code-review --live
@@ -66,7 +66,7 @@ promptops rollout code-review --percentage 10
 # prompts/code-review.yaml
 name: code-review
 version: 2.0.0
-model: gpt-4o
+model: deepseek-chat
 author: jack.zhu
 created_at: 2026-05-25T12:00:00
 tags: [production, security]
@@ -102,6 +102,7 @@ PromptOps CLI (Python)
 │
 ├── LLM Tester (真实 API 调用)
 │   ├── OpenAI SDK 集成
+│   ├── DeepSeek SDK 集成 (OpenAI 兼容 API)
 │   ├── Anthropic SDK 集成
 │   └── Cost tracking
 │
@@ -128,8 +129,10 @@ promptops init your-project
 # 创建提示词
 promptops new code-review --author jack.zhu
 
-# 配置 API Key
-export OPENAI_API_KEY=sk-xxx
+# 配置 API Key（按需选择）
+export DEEPSEEK_API_KEY=sk-xxx        # DeepSeek（默认模型）
+export OPENAI_API_KEY=sk-xxx           # OpenAI
+export ANTHROPIC_API_KEY=sk-ant-xxx    # Anthropic
 
 # 运行测试
 promptops test code-review --live

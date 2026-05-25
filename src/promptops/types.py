@@ -9,7 +9,7 @@ class PromptMetadata(BaseModel):
     """提示词元数据"""
     name: str = Field(..., description="提示词名称")
     version: str = Field(default="1.0.0", description="语义版本号")
-    model: str = Field(default="gpt-4o", description="LLM模型")
+    model: str = Field(default="deepseek-chat", description="LLM模型")
     author: str = Field(default="unknown", description="作者")
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
     updated_at: datetime = Field(default_factory=datetime.now, description="更新时间")

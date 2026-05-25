@@ -1,7 +1,7 @@
 # 示例提示词：代码审查助手
 name: code-review
 version: 1.0.0
-model: gpt-4o
+model: deepseek-chat
 author: jack.zhu
 created_at: 2026-05-25T12:00:00
 updated_at: 2026-05-25T12:00:00

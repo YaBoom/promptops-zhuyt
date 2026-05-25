@@ -19,7 +19,8 @@ keywords = [
     "version-control",
     "prompt-management",
     "dspy",
-    "openai"
+    "openai",
+    "deepseek"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

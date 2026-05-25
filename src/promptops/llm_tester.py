@@ -1,4 +1,4 @@
-"""PromptOps CLI - Real LLM Testing with OpenAI/Anthropic"""
+"""PromptOps CLI - Real LLM Testing with OpenAI/Anthropic/DeepSeek"""
 
 import asyncio
 import time
@@ -23,13 +23,21 @@ console = Console()
 class LLMTester:
     """真实 LLM API 测试器"""
     
+    DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+    
     def __init__(
         self,
         openai_api_key: Optional[str] = None,
-        anthropic_api_key: Optional[str] = None
+        anthropic_api_key: Optional[str] = None,
+        deepseek_api_key: Optional[str] = None
     ):
         self.openai_client = AsyncOpenAI(api_key=openai_api_key) if openai_api_key else None
         self.anthropic_client = AsyncAnthropic(api_key=anthropic_api_key) if anthropic_api_key else None
+        # DeepSeek 使用 OpenAI 兼容 API
+        self.deepseek_client = AsyncOpenAI(
+            api_key=deepseek_api_key,
+            base_url=self.DEEPSEEK_BASE_URL
+        ) if deepseek_api_key else None
     
     async def run_tests(
         self,
@@ -156,6 +164,31 @@ class LLMTester:
                 finish_reason=response.choices[0].finish_reason
             )
         
+        elif prompt.model.startswith("deepseek"):
+            if not self.deepseek_client:
+                raise ValueError("DeepSeek API key not configured")
+            
+            response = await self.deepseek_client.chat.completions.create(
+                model=prompt.model,
+                messages=[{"role": "user", "content": full_prompt}],
+                temperature=prompt.config.get("temperature", 0.7) if prompt.config else 0.7,
+                max_tokens=prompt.config.get("max_tokens", 1000) if prompt.config else 1000
+            )
+            
+            latency = (time.time() - start_time) * 1000
+            content = response.choices[0].message.content or ""
+            tokens_used = response.usage.total_tokens
+            cost = self._calculate_deepseek_cost(prompt.model, tokens_used)
+            
+            return LLMResponse(
+                content=content,
+                model=prompt.model,
+                latency_ms=latency,
+                tokens_used=tokens_used,
+                cost=cost,
+                finish_reason=response.choices[0].finish_reason or "complete"
+            )
+        
         elif prompt.model.startswith("claude"):
             if not self.anthropic_client:
                 raise ValueError("Anthropic API key not configured")
@@ -244,6 +277,14 @@ class LLMTester:
             "claude-3.7-sonnet": 0.003 / 1000,
         }
         return tokens * pricing.get(model, 0.003 / 1000)
+    
+    def _calculate_deepseek_cost(self, model: str, tokens: int) -> float:
+        """计算 DeepSeek 成本（简化版）"""
+        pricing = {
+            "deepseek-chat": 0.0014 / 1000,   # $1.4 per 1M tokens (input)
+            "deepseek-reasoner": 0.0055 / 1000,  # $5.5 per 1M tokens
+        }
+        return tokens * pricing.get(model, 0.0014 / 1000)
     
     def validate_thresholds(
         self,
